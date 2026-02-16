@@ -200,29 +200,7 @@ export default function Discussant() {
     setShowTutorial(true);
   };
 
-  const handleFileUpload = (e) => {
-    const uploaded = Array.from(e.target.files);
-    if (!selectedSubject || uploaded.length === 0) { alert('Please select a subject first!'); return; }
-
-    uploaded.forEach(file => {
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        const newFile = {
-          id: Date.now() + Math.random(),
-          subjectId: parseInt(selectedSubject),
-          name: file.name,
-          type: file.type,
-          size: file.size,
-          data: ev.target.result,
-          uploadedAt: new Date().toISOString(),
-          readTime: 0
-        };
-        setAndSaveFiles([...files, newFile]);
-      };
-      reader.readAsDataURL(file);
-    });
-    e.target.value = '';
-  };
+ 
   const handleFileUpload = (e) => {
   const uploaded = Array.from(e.target.files);
   if (!selectedSubject || !uploaded.length) {
