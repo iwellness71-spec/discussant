@@ -82,15 +82,60 @@ export default function Discussant() {
       ]
     },
     pediatrics: {
-      name: 'Pediatrics Rotation',
-      subjects: [
-        { name: 'Neonatology', topics: ['Newborn Assessment', 'Jaundice', 'Respiratory Distress'] },
-        { name: 'Growth & Development', topics: ['Milestones', 'Failure to Thrive', 'Developmental Delays'] },
-        { name: 'Pediatric Emergency', topics: ['Fever', 'Dehydration', 'Seizures'] },
-        { name: 'Common Illnesses', topics: ['Viral Infections', 'Otitis Media', 'Asthma', 'GERD'] }
+  name: 'Pediatrics Rotation',
+  subjects: [
+    {
+      name: 'Paediatric Neurology',
+      topics: [
+        'Intellectual Disability', 'Cerebral Palsy',
+        'Neural Tube Defects', 'Hydrocephalus',
+        'Fever & Approach to a Convulsing Child'
       ]
     },
-    obgyn: {
+    {
+      name: 'Paediatric Auto-Immune Disorders',
+      topics: ['Myasthenia Gravis', 'Juvenile Rheumatoid Arthritis', 'SLE']
+    },
+    {
+      name: 'Paediatric Solid Tumors',
+      topics: ['Retinoblastoma', 'Nephroblastoma', 'Burkitt Lymphoma']
+    },
+    {
+      name: 'Paediatric Infectious Disease',
+      topics: [
+        'Sepsis / SIRS / Septic Shock', 'Typhoid Fever', 'Diphtheria',
+        'Pertussis', 'Varicella Zoster', 'Measles',
+        'Paediatric TB', 'Tetanus', 'Paediatric HIV/AIDS & EMTCT'
+      ]
+    },
+    {
+      name: 'Parasitology in Children',
+      topics: ['Malaria', 'Intestinal Parasites', 'Leishmaniasis', 'Schistosomiasis', 'Trypanosomiasis']
+    },
+    {
+      name: 'Miscellaneous Paediatrics',
+      topics: [
+        'Approach to Acute Limb Pain', 'Hypertension in Children',
+        'Common Poisoning', 'Approach to the Child with Irritability',
+        'Approach to a Child with Abdominal Pain',
+        'Approach to the Child with Failure to Thrive',
+        'Approach to the Child with Loss of Consciousness',
+        'Respiratory Distress in Newborns',
+        'Approach to the Child with Oedema',
+        'Approach to the Child with Haematuria',
+        'Approach to Newborn with Fever',
+        'Child Abuse and Neglect', 'Common Home Accidents in Children',
+        'Consanguinity', 'Hypoglycaemia in Neonates',
+        'Iron Deficiency Anaemia in Children', 'Wheezing in Infants',
+        'Dehydration & Management in Well-Nourished Children',
+        'Dehydration & Management in Malnourished Children',
+        'Acute Asthma Exacerbation'
+      ]
+    }
+  ]
+},
+    
+      obgyn: {
       name: 'OB/GYN Rotation',
       subjects: [
         { name: 'Obstetrics', topics: ['Prenatal Care', 'Labor & Delivery', 'Complications', 'Postpartum'] },
