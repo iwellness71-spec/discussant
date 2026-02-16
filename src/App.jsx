@@ -223,6 +223,32 @@ export default function Discussant() {
     });
     e.target.value = '';
   };
+  const handleFileUpload = (e) => {
+  const uploaded = Array.from(e.target.files);
+  if (!selectedSubject || !uploaded.length) {
+    alert('Select a subject first!');
+    return;
+  }
+  uploaded.forEach(file => {
+    const objectUrl = URL.createObjectURL(file);
+    const newFile = {
+      id: Date.now() + Math.random(),
+      subjectId: parseInt(selectedSubject),
+      name: file.name,
+      type: file.type,
+      size: file.size,
+      data: objectUrl,       // ← object URL, not base64
+      uploadedAt: new Date().toISOString(),
+      readTime: 0
+    };
+    // Save metadata only (no file data) to localStorage
+    const meta = { ...newFile, data: null };
+    setAndSaveFiles([...files, meta]);
+    // Keep full file with URL in memory for this session
+    setFiles(prev => [...prev.filter(f => f.id !== newFile.id), newFile]);
+  });
+  e.target.value = '';
+};
 
   const openFile = (file) => {
     setViewingFile(file);
