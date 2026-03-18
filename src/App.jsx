@@ -1,187 +1,174 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { BookOpen, Plus, Calendar, Clock, CheckCircle, Circle, Trash2, Brain, TrendingUp, Download, Upload, Users, Award, FileText, MessageSquare, Play, Pause, X, Send, Loader } from 'lucide-react';
+import { BookOpen, Plus, Calendar, Clock, CheckCircle, Circle, Trash2, Brain, TrendingUp, Download, Upload, Users, Award, FileText, MessageSquare, Play, Pause, X, Send, Loader, Lock, Eye, ZoomIn, ZoomOut, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Moon, Sun, Search, LogIn, LogOut, Shield, UserPlus, ThumbsUp, MessageCircle } from 'lucide-react';
 
-// localStorage helper (replaces window.storage for real deployment)
+const API = {
+  login: async (email, password) => {
+    await new Promise(resolve => setTimeout(resolve, 500));
+    if (email && password) {
+      return { 
+        success: true, 
+        user: { 
+          id: Date.now(), 
+          email, 
+          name: email.split('@')[0],
+          isAdmin: email.includes('admin')
+        }
+      };
+    }
+    return { success: false, error: 'Invalid credentials' };
+  },
+  register: async (email, password, name) => {
+    await new Promise(resolve => setTimeout(resolve, 500));
+    return { 
+      success: true, 
+      user: { id: Date.now(), email, name, isAdmin: false }
+    };
+  },
+  getSharedMaterials: async () => {
+    try {
+      const saved = localStorage.getItem('sharedMaterials');
+      return saved ? JSON.parse(saved) : [];
+    } catch { return []; }
+  },
+  uploadSharedMaterial: async (material) => {
+    const materials = await API.getSharedMaterials();
+    materials.push(material);
+    localStorage.setItem('sharedMaterials', JSON.stringify(materials));
+    return { success: true };
+  },
+  getCases: async () => {
+    try {
+      const saved = localStorage.getItem('casesDB');
+      return saved ? JSON.parse(saved) : [];
+    } catch { return []; }
+  },
+  addCase: async (caseData) => {
+    const cases = await API.getCases();
+    cases.unshift(caseData);
+    localStorage.setItem('casesDB', JSON.stringify(cases));
+    return { success: true };
+  },
+  addComment: async (caseId, comment) => {
+    const cases = await API.getCases();
+    const caseIndex = cases.findIndex(c => c.id === caseId);
+    if (caseIndex !== -1) {
+      cases[caseIndex].comments = cases[caseIndex].comments || [];
+      cases[caseIndex].comments.push(comment);
+      localStorage.setItem('casesDB', JSON.stringify(cases));
+    }
+    return { success: true };
+  },
+  toggleLike: async (caseId, userId) => {
+    const cases = await API.getCases();
+    const caseIndex = cases.findIndex(c => c.id === caseId);
+    if (caseIndex !== -1) {
+      cases[caseIndex].likes = cases[caseIndex].likes || [];
+      const likeIndex = cases[caseIndex].likes.indexOf(userId);
+      if (likeIndex > -1) {
+        cases[caseIndex].likes.splice(likeIndex, 1);
+      } else {
+        cases[caseIndex].likes.push(userId);
+      }
+      localStorage.setItem('casesDB', JSON.stringify(cases));
+    }
+    return { success: true };
+  }
+};
+
 const storage = {
   get: (key) => {
     try {
       const val = localStorage.getItem(key);
-      return val ? JSON.parse(val) : null;
+      return val ? JSON.parse(atob(val)) : null;
     } catch { return null; }
   },
   set: (key, value) => {
     try {
-      localStorage.setItem(key, JSON.stringify(value));
+      localStorage.setItem(key, btoa(JSON.stringify(value)));
     } catch (e) { console.error('Storage error', e); }
   }
 };
 
-export default function Discussant() {
+export default function DiscussantPro() {
+  const [user, setUser] = useState(null);
+  const [authMode, setAuthMode] = useState('login');
+  const [authEmail, setAuthEmail] = useState('');
+  const [authPassword, setAuthPassword] = useState('');
+  const [authName, setAuthName] = useState('');
   const [activeTab, setActiveTab] = useState('today');
   const [subjects, setSubjects] = useState([]);
   const [topics, setTopics] = useState([]);
   const [studySessions, setStudySessions] = useState([]);
   const [files, setFiles] = useState([]);
-  const [userName, setUserName] = useState('');
-  const [showNamePrompt, setShowNamePrompt] = useState(false);
-  const [showTemplates, setShowTemplates] = useState(false);
-  const [showTutorial, setShowTutorial] = useState(false);
-  const [tutorialStep, setTutorialStep] = useState(0);
-  const [showShareModal, setShowShareModal] = useState(false);
+  const [sharedMaterials, setSharedMaterials] = useState([]);
+  const [cases, setCases] = useState([]);
+  const [showAdminPanel, setShowAdminPanel] = useState(false);
+  const [showCaseModal, setShowCaseModal] = useState(false);
   const [viewingFile, setViewingFile] = useState(null);
-  const [showAIChat, setShowAIChat] = useState(false);
-  const [aiMessages, setAiMessages] = useState([]);
-  const [aiInput, setAiInput] = useState('');
-  const [aiLoading, setAiLoading] = useState(false);
+  const [viewingCase, setViewingCase] = useState(null);
   const [studyTimer, setStudyTimer] = useState(0);
   const [timerRunning, setTimerRunning] = useState(false);
   const [currentStudySubject, setCurrentStudySubject] = useState(null);
+  const [darkMode, setDarkMode] = useState(false);
+  const [pdfZoom, setPdfZoom] = useState(100);
+  const [todayExpanded, setTodayExpanded] = useState(false);
+  const [todaySearch, setTodaySearch] = useState('');
   const timerRef = useRef(null);
   const [newSubject, setNewSubject] = useState('');
   const [selectedSubject, setSelectedSubject] = useState('');
   const [newTopic, setNewTopic] = useState('');
   const [topicNotes, setTopicNotes] = useState('');
+  const [newCaseTitle, setNewCaseTitle] = useState('');
+  const [newCaseContent, setNewCaseContent] = useState('');
+  const [newCaseSpecialty, setNewCaseSpecialty] = useState('');
+  const [caseComment, setCaseComment] = useState('');
+  const [adminMaterialTitle, setAdminMaterialTitle] = useState('');
+  const [adminMaterialSubject, setAdminMaterialSubject] = useState('');
+  const [adminMaterialDesc, setAdminMaterialDesc] = useState('');
 
   const templates = {
-    year1: {
-      name: 'Medical School Year 1',
+    pediatrics: {
+      name: 'Pediatrics Rotation',
       subjects: [
-        { name: 'Anatomy', topics: ['Upper Limb', 'Lower Limb', 'Head & Neck', 'Thorax', 'Abdomen', 'Pelvis'] },
-        { name: 'Physiology', topics: ['Cardiovascular', 'Respiratory', 'Renal', 'Neurophysiology', 'Endocrine'] },
-        { name: 'Biochemistry', topics: ['Metabolism', 'Proteins', 'Carbohydrates', 'Lipids', 'Enzymes'] },
-        { name: 'Histology', topics: ['Epithelial Tissue', 'Connective Tissue', 'Muscle Tissue', 'Nervous Tissue'] },
-        { name: 'Embryology', topics: ['Early Development', 'Organogenesis', 'Congenital Abnormalities'] }
-      ]
-    },
-    year2: {
-      name: 'Medical School Year 2',
-      subjects: [
-        { name: 'Pathology', topics: ['Cell Injury', 'Inflammation', 'Neoplasia', 'Immunopathology'] },
-        { name: 'Pharmacology', topics: ['ANS Drugs', 'CNS Drugs', 'Antibiotics', 'Cardiovascular Drugs'] },
-        { name: 'Microbiology', topics: ['Bacteria', 'Viruses', 'Fungi', 'Parasites'] },
-        { name: 'Clinical Skills', topics: ['History Taking', 'Physical Examination', 'Communication'] }
+        { name: 'Paediatric Neurology', topics: ['Intellectual Disability', 'Cerebral Palsy', 'Neural Tube Defects'] },
+        { name: 'Paediatric Infectious Disease', topics: ['Sepsis/SIRS', 'Typhoid', 'Diphtheria', 'Pertussis'] },
+        { name: 'Miscellaneous Paediatrics', topics: ['Acute Limb Pain', 'Hypertension', 'Dehydration'] }
       ]
     },
     surgery: {
       name: 'Surgery Rotation',
       subjects: [
-        { name: 'General Surgery', topics: ['Acute Abdomen', 'Hernias', 'Breast Disease', 'Thyroid', 'GI Surgery'] },
-        { name: 'Trauma', topics: ['ATLS Protocols', 'Head Trauma', 'Chest Trauma', 'Abdominal Trauma'] },
-        { name: 'Surgical Techniques', topics: ['Suturing', 'Knot Tying', 'Sterile Technique', 'Pre-op Assessment'] },
-        { name: 'Vascular Surgery', topics: ['Peripheral Arterial Disease', 'Aneurysms', 'Venous Disease'] }
+        { name: 'General Surgery', topics: ['Acute Abdomen', 'Hernias', 'Breast Disease'] },
+        { name: 'Trauma', topics: ['ATLS Protocols', 'Head Trauma', 'Chest Trauma'] }
       ]
     },
     internal: {
       name: 'Internal Medicine',
       subjects: [
-        { name: 'Cardiology', topics: ['Heart Failure', 'Arrhythmias', 'CAD', 'Valvular Disease'] },
-        { name: 'Pulmonology', topics: ['COPD', 'Asthma', 'Pneumonia', 'PE/DVT'] },
-        { name: 'Gastroenterology', topics: ['GI Bleeding', 'IBD', 'Liver Disease', 'Pancreatitis'] },
-        { name: 'Nephrology', topics: ['AKI', 'CKD', 'Electrolyte Disorders', 'Acid-Base'] },
-        { name: 'Endocrinology', topics: ['Diabetes', 'Thyroid Disorders', 'Adrenal Disorders'] }
-      ]
-    },
-    pediatrics: {
-  name: 'Pediatrics Rotation',
-  subjects: [
-    {
-      name: 'Paediatric Neurology',
-      topics: [
-        'Intellectual Disability', 'Cerebral Palsy',
-        'Neural Tube Defects', 'Hydrocephalus',
-        'Fever & Approach to a Convulsing Child'
-      ]
-    },
-    {
-      name: 'Paediatric Auto-Immune Disorders',
-      topics: ['Myasthenia Gravis', 'Juvenile Rheumatoid Arthritis', 'SLE']
-    },
-    {
-      name: 'Paediatric Solid Tumors',
-      topics: ['Retinoblastoma', 'Nephroblastoma', 'Burkitt Lymphoma']
-    },
-    {
-      name: 'Paediatric Infectious Disease',
-      topics: [
-        'Sepsis / SIRS / Septic Shock', 'Typhoid Fever', 'Diphtheria',
-        'Pertussis', 'Varicella Zoster', 'Measles',
-        'Paediatric TB', 'Tetanus', 'Paediatric HIV/AIDS & EMTCT'
-      ]
-    },
-    {
-      name: 'Parasitology in Children',
-      topics: ['Malaria', 'Intestinal Parasites', 'Leishmaniasis', 'Schistosomiasis', 'Trypanosomiasis']
-    },
-    {
-      name: 'Miscellaneous Paediatrics',
-      topics: [
-        'Approach to Acute Limb Pain', 'Hypertension in Children',
-        'Common Poisoning', 'Approach to the Child with Irritability',
-        'Approach to a Child with Abdominal Pain',
-        'Approach to the Child with Failure to Thrive',
-        'Approach to the Child with Loss of Consciousness',
-        'Respiratory Distress in Newborns',
-        'Approach to the Child with Oedema',
-        'Approach to the Child with Haematuria',
-        'Approach to Newborn with Fever',
-        'Child Abuse and Neglect', 'Common Home Accidents in Children',
-        'Consanguinity', 'Hypoglycaemia in Neonates',
-        'Iron Deficiency Anaemia in Children', 'Wheezing in Infants',
-        'Dehydration & Management in Well-Nourished Children',
-        'Dehydration & Management in Malnourished Children',
-        'Acute Asthma Exacerbation'
-      ]
-    }
-  ]
-},
-    
-      obgyn: {
-      name: 'OB/GYN Rotation',
-      subjects: [
-        { name: 'Obstetrics', topics: ['Prenatal Care', 'Labor & Delivery', 'Complications', 'Postpartum'] },
-        { name: 'Gynecology', topics: ['Menstrual Disorders', 'Contraception', 'Fibroids', 'PCOS'] },
-        { name: 'Gyn Oncology', topics: ['Cervical Cancer', 'Ovarian Cancer', 'Endometrial Cancer'] }
-      ]
-    },
-    psychiatry: {
-      name: 'Psychiatry Rotation',
-      subjects: [
-        { name: 'Mood Disorders', topics: ['Major Depression', 'Bipolar Disorder', 'Suicide Assessment'] },
-        { name: 'Anxiety Disorders', topics: ['GAD', 'Panic Disorder', 'PTSD', 'OCD'] },
-        { name: 'Psychotic Disorders', topics: ['Schizophrenia', 'Schizoaffective Disorder'] },
-        { name: 'Psychopharmacology', topics: ['Antidepressants', 'Antipsychotics', 'Mood Stabilizers'] }
-      ]
-    },
-    usmle: {
-      name: 'USMLE Step 1 Prep',
-      subjects: [
-        { name: 'Cardiology', topics: ['Anatomy', 'Physiology', 'Pathology', 'Pharmacology'] },
-        { name: 'Pulmonology', topics: ['Anatomy', 'Physiology', 'Pathology', 'Pharmacology'] },
-        { name: 'Neurology', topics: ['Anatomy', 'Physiology', 'Pathology', 'Pharmacology'] },
-        { name: 'Behavioral Science', topics: ['Ethics', 'Statistics', 'Psychology'] }
+        { name: 'Cardiology', topics: ['Heart Failure', 'Arrhythmias', 'CAD'] },
+        { name: 'Pulmonology', topics: ['COPD', 'Asthma', 'Pneumonia'] }
       ]
     },
     blank: { name: 'Start From Scratch', subjects: [] }
   };
 
   useEffect(() => {
+    const savedUser = storage.get('currentUser');
     const savedSubjects = storage.get('subjects');
     const savedTopics = storage.get('topics');
     const savedSessions = storage.get('sessions');
     const savedFiles = storage.get('files');
-    const savedName = storage.get('userName');
-    const tutorialSeen = storage.get('tutorialSeen');
+    const savedDarkMode = storage.get('darkMode');
 
+    if (savedUser) setUser(savedUser);
     if (savedSubjects) setSubjects(savedSubjects);
     if (savedTopics) setTopics(savedTopics);
     if (savedSessions) setStudySessions(savedSessions);
     if (savedFiles) setFiles(savedFiles);
-    if (savedName) {
-      setUserName(savedName);
-      if (!tutorialSeen) setShowTutorial(true);
-    } else {
-      setShowNamePrompt(true);
-    }
+    if (savedDarkMode) setDarkMode(savedDarkMode);
+
+    loadSharedMaterials();
+    loadCases();
   }, []);
 
   useEffect(() => {
@@ -193,30 +180,131 @@ export default function Discussant() {
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [timerRunning]);
 
+  const loadSharedMaterials = async () => {
+    const materials = await API.getSharedMaterials();
+    setSharedMaterials(materials);
+  };
+
+  const loadCases = async () => {
+    const casesData = await API.getCases();
+    setCases(casesData);
+  };
+
+  const handleAuth = async () => {
+    let result;
+    if (authMode === 'login') {
+      result = await API.login(authEmail, authPassword);
+    } else {
+      result = await API.register(authEmail, authPassword, authName);
+    }
+    
+    if (result.success) {
+      setUser(result.user);
+      storage.set('currentUser', result.user);
+      setAuthEmail('');
+      setAuthPassword('');
+      setAuthName('');
+    } else {
+      alert(result.error || 'Authentication failed');
+    }
+  };
+
+  const handleLogout = () => {
+    setUser(null);
+    storage.set('currentUser', null);
+  };
+
+  const handleAdminUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file || !adminMaterialTitle || !adminMaterialSubject) {
+      alert('Please fill all fields and select a file');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      const material = {
+        id: Date.now(),
+        title: adminMaterialTitle,
+        subject: adminMaterialSubject,
+        description: adminMaterialDesc,
+        fileName: file.name,
+        fileType: file.type,
+        fileData: ev.target.result,
+        uploadedBy: user.email,
+        uploadedAt: new Date().toISOString()
+      };
+      
+      await API.uploadSharedMaterial(material);
+      await loadSharedMaterials();
+      setAdminMaterialTitle('');
+      setAdminMaterialSubject('');
+      setAdminMaterialDesc('');
+      e.target.value = '';
+      alert('Material uploaded successfully!');
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleAddCase = async () => {
+    if (!newCaseTitle || !newCaseContent || !user) return;
+    
+    const caseData = {
+      id: Date.now(),
+      title: newCaseTitle,
+      content: newCaseContent,
+      specialty: newCaseSpecialty || 'General',
+      authorId: user.id,
+      authorName: user.name,
+      createdAt: new Date().toISOString(),
+      likes: [],
+      comments: []
+    };
+    
+    await API.addCase(caseData);
+    await loadCases();
+    setNewCaseTitle('');
+    setNewCaseContent('');
+    setNewCaseSpecialty('');
+    setShowCaseModal(false);
+  };
+
+  const handleAddComment = async (caseId) => {
+    if (!caseComment.trim() || !user) return;
+    
+    const comment = {
+      id: Date.now(),
+      userId: user.id,
+      userName: user.name,
+      content: caseComment,
+      createdAt: new Date().toISOString()
+    };
+    
+    await API.addComment(caseId, comment);
+    await loadCases();
+    setCaseComment('');
+  };
+
+  const handleToggleLike = async (caseId) => {
+    if (!user) return;
+    await API.toggleLike(caseId, user.id);
+    await loadCases();
+  };
+
   const setAndSaveSubjects = (data) => { setSubjects(data); storage.set('subjects', data); };
   const setAndSaveTopics = (data) => { setTopics(data); storage.set('topics', data); };
   const setAndSaveSessions = (data) => { setStudySessions(data); storage.set('sessions', data); };
   const setAndSaveFiles = (data) => { setFiles(data); storage.set('files', data); };
 
-  const saveUserName = (name) => {
-    setUserName(name);
-    storage.set('userName', name);
-    setShowNamePrompt(false);
-    if (!storage.get('subjects') || storage.get('subjects').length === 0) {
-      setShowTemplates(true);
-    } else {
-      setShowTutorial(true);
-    }
-  };
-
-  const completeTutorial = () => {
-    storage.set('tutorialSeen', true);
-    setShowTutorial(false);
+  const toggleDarkMode = () => {
+    const newMode = !darkMode;
+    setDarkMode(newMode);
+    storage.set('darkMode', newMode);
   };
 
   const loadTemplate = (key) => {
     const template = templates[key];
-    if (!template || key === 'blank') { setShowTemplates(false); return; }
+    if (!template || key === 'blank') return;
 
     const newSubjects = [];
     const newTopics = [];
@@ -241,48 +329,41 @@ export default function Discussant() {
 
     setAndSaveSubjects(newSubjects);
     setAndSaveTopics(newTopics);
-    setShowTemplates(false);
-    setShowTutorial(true);
   };
 
- 
   const handleFileUpload = (e) => {
-  const uploaded = Array.from(e.target.files);
-  if (!selectedSubject || !uploaded.length) {
-    alert('Select a subject first!');
-    return;
-  }
-  uploaded.forEach(file => {
-    const objectUrl = URL.createObjectURL(file);
-    const newFile = {
-      id: Date.now() + Math.random(),
-      subjectId: parseInt(selectedSubject),
-      name: file.name,
-      type: file.type,
-      size: file.size,
-      data: objectUrl,       // ← object URL, not base64
-      uploadedAt: new Date().toISOString(),
-      readTime: 0
-    };
-    // Save metadata only (no file data) to localStorage
-    const meta = { ...newFile, data: null };
-    setAndSaveFiles([...files, meta]);
-    // Keep full file with URL in memory for this session
-    setFiles(prev => [...prev.filter(f => f.id !== newFile.id), newFile]);
-  });
-  e.target.value = '';
-};
+    const uploaded = Array.from(e.target.files);
+    if (!selectedSubject || !uploaded.length) {
+      alert('Please select a subject first!');
+      return;
+    }
+
+    uploaded.forEach(file => {
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const newFile = {
+          id: Date.now() + Math.random(),
+          subjectId: parseInt(selectedSubject),
+          name: file.name,
+          type: file.type,
+          size: file.size,
+          data: ev.target.result,
+          uploadedAt: new Date().toISOString(),
+          readTime: 0
+        };
+        setAndSaveFiles([...files, newFile]);
+      };
+      reader.readAsDataURL(file);
+    });
+    e.target.value = '';
+  };
 
   const openFile = (file) => {
     setViewingFile(file);
-    setCurrentStudySubject(file.subjectId);
+    setCurrentStudySubject(file.subjectId || file.subject);
     setStudyTimer(0);
     setTimerRunning(true);
-    setShowAIChat(false);
-    setAiMessages([{
-      role: 'assistant',
-      content: `Hi! I'm your AI tutor. I'm here to help you study "${file.name}". Ask me anything!`
-    }]);
+    setPdfZoom(100);
   };
 
   const closeFile = () => {
@@ -293,45 +374,13 @@ export default function Discussant() {
         subjectId: currentStudySubject,
         duration: mins || 1,
         date: new Date().toISOString(),
-        fileName: viewingFile?.name
+        fileName: viewingFile?.name || viewingFile?.fileName
       };
       setAndSaveSessions([...studySessions, session]);
-      const updatedFiles = files.map(f =>
-        f.id === viewingFile.id ? { ...f, readTime: f.readTime + studyTimer } : f
-      );
-      setAndSaveFiles(updatedFiles);
     }
     setViewingFile(null);
     setTimerRunning(false);
     setStudyTimer(0);
-    setShowAIChat(false);
-    setAiMessages([]);
-  };
-
-  const askAI = async () => {
-    if (!aiInput.trim()) return;
-    const userMsg = { role: 'user', content: aiInput };
-    setAiMessages(prev => [...prev, userMsg]);
-    setAiInput('');
-    setAiLoading(true);
-
-    try {
-      const res = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
-          max_tokens: 1000,
-          system: `You are a medical education tutor. The student is studying "${viewingFile?.name}". Give clear concise answers suitable for medical students.`,
-          messages: aiMessages.concat(userMsg).map(m => ({ role: m.role, content: m.content }))
-        })
-      });
-      const data = await res.json();
-      setAiMessages(prev => [...prev, { role: 'assistant', content: data.content[0].text }]);
-    } catch {
-      setAiMessages(prev => [...prev, { role: 'assistant', content: 'Connection error. Please try again.' }]);
-    }
-    setAiLoading(false);
   };
 
   const addSubject = () => {
@@ -362,14 +411,12 @@ export default function Discussant() {
   const markReviewed = (id) => setAndSaveTopics(topics.map(t => t.id === id ? { ...t, lastReviewed: new Date().toISOString(), reviewCount: t.reviewCount + 1 } : t));
   const deleteTopic = (id) => setAndSaveTopics(topics.filter(t => t.id !== id));
   const deleteFile = (id) => setAndSaveFiles(files.filter(f => f.id !== id));
-  const deleteSubject = (id) => {
-    setAndSaveSubjects(subjects.filter(s => s.id !== id));
-    setAndSaveTopics(topics.filter(t => t.subjectId !== id));
-    setAndSaveSessions(studySessions.filter(s => s.subjectId !== id));
-    setAndSaveFiles(files.filter(f => f.subjectId !== id));
+
+  const getSubjectName = (id) => {
+    if (typeof id === 'string') return id;
+    return subjects.find(s => s.id === parseInt(id))?.name || '';
   };
 
-  const getSubjectName = (id) => subjects.find(s => s.id === parseInt(id))?.name || '';
   const getTodayTopics = () => topics.filter(t => new Date(t.dateAdded).toDateString() === new Date().toDateString());
   const getNeedsReview = () => {
     const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 3);
@@ -384,127 +431,119 @@ export default function Discussant() {
 
   const formatDate = (iso) => new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 
-  const exportData = () => {
-    const blob = new Blob([JSON.stringify({ userName, subjects, topics, studySessions, exportDate: new Date().toISOString() }, null, 2)], { type: 'application/json' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `discussant-${userName.replace(/\s/g,'-')}-${new Date().toISOString().split('T')[0]}.json`;
-    a.click();
+  const allFiles = [...sharedMaterials.map(m => ({
+    id: m.id,
+    name: m.fileName,
+    title: m.title,
+    subject: m.subject,
+    description: m.description,
+    type: m.fileType,
+    data: m.fileData,
+    uploadedAt: m.uploadedAt,
+    isShared: true
+  })), ...files];
+
+  const filteredTodayTopics = todaySearch 
+    ? getTodayTopics().filter(t => 
+        t.title.toLowerCase().includes(todaySearch.toLowerCase()) ||
+        getSubjectName(t.subjectId).toLowerCase().includes(todaySearch.toLowerCase()))
+    : getTodayTopics();
+
+  const theme = darkMode ? {
+    bg: '#0F172A',
+    cardBg: '#1E293B',
+    text: '#F1F5F9',
+    textMuted: '#94A3B8',
+    border: '#334155',
+    accent: '#EAB308'
+  } : {
+    bg: '#F8FAFC',
+    cardBg: '#FFFFFF',
+    text: '#0F172A',
+    textMuted: '#64748B',
+    border: '#E2E8F0',
+    accent: '#EAB308'
   };
 
-  const importData = (e) => {
-    const file = e.target.files[0]; if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      try {
-        const d = JSON.parse(ev.target.result);
-        if (d.subjects) setAndSaveSubjects(d.subjects);
-        if (d.topics) setAndSaveTopics(d.topics);
-        if (d.studySessions) setAndSaveSessions(d.studySessions);
-        alert('Imported successfully!');
-      } catch { alert('Error importing file.'); }
-    };
-    reader.readAsText(file);
-  };
-
-  const copyShare = () => {
-    navigator.clipboard.writeText(`Check out Discussant - a study platform built for med school!\n\n• Pre-loaded templates for all years & rotations\n• Upload files (PDFs, slides, notes)\n• Auto study timer\n• AI tutor for instant help\n• Progress tracking\n\nVisit: https://discussant.vercel.app`);
-    alert('Copied!');
-  };
-
-  const stats = {
-    total: topics.length,
-    mastered: topics.filter(t => t.mastered).length,
-    studyTime: getTotalStudyTime(),
-    thisWeek: topics.filter(t => new Date(t.dateAdded) > new Date(Date.now() - 7 * 86400000)).length
-  };
-
-  const tutorialSteps = [
-    { title: "Welcome to Discussant! 👋", content: "Your complete medical study platform. Upload files, auto-track time, and get AI help while studying!", icon: <Brain className="w-16 h-16 text-yellow-500" /> },
-    { title: "Upload & Read Files 📚", content: "Upload lecture slides, PDFs, and notes. When you open a file, the timer starts automatically!", icon: <FileText className="w-16 h-16 text-yellow-500" /> },
-    { title: "AI Study Assistant 🤖", content: "While reading, click 'AI Help' to ask questions instantly. Your personal medical tutor 24/7!", icon: <MessageSquare className="w-16 h-16 text-yellow-500" /> },
-    { title: "Track & Review 📊", content: "See what needs review, track mastery, and export data to compare with study partners!", icon: <Award className="w-16 h-16 text-yellow-500" /> }
-  ];
-
-  // ─── FILE VIEWER ───
+  // FILE VIEWER
   if (viewingFile) {
+    const isPDF = viewingFile.type?.includes('pdf');
+    const isImage = viewingFile.type?.includes('image');
+    const isPPT = viewingFile.type?.includes('presentation') || viewingFile.name?.endsWith('.ppt') || viewingFile.name?.endsWith('.pptx');
+    const isWord = viewingFile.type?.includes('word') || viewingFile.type?.includes('document') || viewingFile.name?.endsWith('.doc') || viewingFile.name?.endsWith('.docx');
+
+    let viewerUrl = viewingFile.data;
+    if (isPPT || isWord) {
+      viewerUrl = `https://docs.google.com/gview?url=${encodeURIComponent(viewingFile.data)}&embedded=true`;
+    }
+
     return (
-      <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', backgroundColor: '#111' }}>
-        <div style={{ background: 'linear-gradient(to right, #EAB308, #CA8A04)', padding: '12px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <button onClick={closeFile} style={{ background: 'rgba(0,0,0,0.2)', border: 'none', borderRadius: 8, padding: 8, cursor: 'pointer' }}>
-              <X size={22} color="#000" />
+      <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', backgroundColor: theme.bg }}>
+        <div style={{ background: 'linear-gradient(135deg, #EAB308 0%, #CA8A04 100%)', padding: '14px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', flexWrap: 'wrap', gap: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+            <button onClick={closeFile} style={{ background: 'rgba(0,0,0,0.15)', border: 'none', borderRadius: 10, padding: 10, cursor: 'pointer' }}>
+              <X size={20} color="#000" strokeWidth={2.5} />
             </button>
             <div>
-              <div style={{ fontWeight: 'bold', fontSize: 18, color: '#000' }}>{viewingFile.name}</div>
-              <div style={{ fontSize: 13, color: '#333' }}>{getSubjectName(viewingFile.subjectId)}</div>
+              <div style={{ fontWeight: 700, fontSize: 19, color: '#000' }}>{viewingFile.title || viewingFile.name}</div>
+              <div style={{ fontSize: 13, color: '#1F2937', fontWeight: 500 }}>{getSubjectName(viewingFile.subjectId || viewingFile.subject)}</div>
             </div>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-            <div style={{ background: 'rgba(0,0,0,0.2)', borderRadius: 8, padding: '6px 14px', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            {isPDF && (
+              <div style={{ display: 'flex', gap: 8, background: 'rgba(0,0,0,0.1)', borderRadius: 8, padding: '4px 8px' }}>
+                <button onClick={() => setPdfZoom(Math.max(50, pdfZoom - 10))} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 6 }}>
+                  <ZoomOut size={16} color="#000" />
+                </button>
+                <span style={{ fontSize: 13, fontWeight: 600, color: '#000', minWidth: 40, textAlign: 'center' }}>{pdfZoom}%</span>
+                <button onClick={() => setPdfZoom(Math.min(200, pdfZoom + 10))} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 6 }}>
+                  <ZoomIn size={16} color="#000" />
+                </button>
+              </div>
+            )}
+            <div style={{ background: 'rgba(0,0,0,0.15)', borderRadius: 10, padding: '8px 16px', display: 'flex', alignItems: 'center', gap: 10 }}>
               {timerRunning ? <Pause size={18} color="#000" /> : <Play size={18} color="#000" />}
-              <span style={{ fontWeight: 'bold', fontSize: 20, color: '#000' }}>{formatTime(studyTimer)}</span>
+              <span style={{ fontWeight: 700, fontSize: 22, color: '#000', fontFamily: 'monospace' }}>{formatTime(studyTimer)}</span>
             </div>
-            <button onClick={() => setTimerRunning(!timerRunning)} style={{ background: '#000', color: '#EAB308', border: 'none', borderRadius: 8, padding: '8px 16px', fontWeight: 'bold', cursor: 'pointer' }}>
+            <button onClick={() => setTimerRunning(!timerRunning)} style={{ background: '#000', color: '#EAB308', border: 'none', borderRadius: 10, padding: '10px 18px', fontWeight: 700, cursor: 'pointer' }}>
               {timerRunning ? 'Pause' : 'Resume'}
-            </button>
-            <button onClick={() => setShowAIChat(!showAIChat)} style={{ background: '#fff', color: '#000', border: 'none', borderRadius: 8, padding: '8px 16px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
-              <MessageSquare size={18} /> AI Help
             </button>
           </div>
         </div>
 
-        <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-          <div style={{ flex: 1, overflow: 'auto', backgroundColor: '#fff', marginRight: showAIChat ? 384 : 0, transition: 'margin 0.3s' }}>
-            {viewingFile.type.includes('pdf') ? (
-              <iframe src={viewingFile.data} style={{ width: '100%', height: '100%', border: 'none' }} title={viewingFile.name} />
-            ) : viewingFile.type.includes('image') ? (
-              <img src={viewingFile.data} alt={viewingFile.name} style={{ maxWidth: '100%', display: 'block', margin: '0 auto', padding: 32 }} />
-            ) : (
-              <div style={{ padding: 32 }}>
-                <p style={{ color: '#555' }}>Preview not available for this file type.</p>
-                <a href={viewingFile.data} download={viewingFile.name} style={{ display: 'inline-block', marginTop: 16, padding: '12px 24px', background: '#EAB308', color: '#000', borderRadius: 8, fontWeight: 'bold', textDecoration: 'none' }}>
+        <div style={{ flex: 1, overflow: 'auto', backgroundColor: darkMode ? '#1E293B' : '#F1F5F9' }}>
+          {isPDF ? (
+            <div style={{ width: '100%', height: '100%', transform: `scale(${pdfZoom / 100})`, transformOrigin: 'top center' }}>
+              <iframe
+                src={viewerUrl}
+                style={{ width: `${100 / (pdfZoom / 100)}%`, height: `${100 / (pdfZoom / 100)}%`, border: 'none' }}
+                title={viewingFile.name}
+              />
+            </div>
+          ) : isImage ? (
+            <div style={{ padding: 40, textAlign: 'center' }}>
+              <img src={viewerUrl} alt={viewingFile.name} style={{ maxWidth: '95%', borderRadius: 12, boxShadow: '0 8px 32px rgba(0,0,0,0.15)' }} />
+            </div>
+          ) : (isPPT || isWord) ? (
+            <iframe
+              src={viewerUrl}
+              style={{ width: '100%', height: '100%', border: 'none' }}
+              title={viewingFile.name}
+            />
+          ) : (
+            <div style={{ padding: 48, maxWidth: 700, margin: '0 auto' }}>
+              <div style={{ background: theme.cardBg, borderRadius: 16, padding: 40, boxShadow: '0 4px 24px rgba(0,0,0,0.08)', textAlign: 'center' }}>
+                <FileText size={56} color="#EAB308" style={{ marginBottom: 20 }} />
+                <h3 style={{ fontWeight: 700, fontSize: 22, marginBottom: 12, color: theme.text }}>{viewingFile.name}</h3>
+                <p style={{ color: theme.textMuted, marginBottom: 28 }}>Preview not available. Download to view.</p>
+                <a
+                  href={viewingFile.data}
+                  download={viewingFile.name}
+                  style={{ display: 'inline-block', padding: '14px 32px', background: '#EAB308', color: '#000', borderRadius: 10, fontWeight: 700, textDecoration: 'none' }}
+                >
+                  <Download size={18} style={{ display: 'inline', marginRight: 8 }} />
                   Download File
                 </a>
-              </div>
-            )}
-          </div>
-
-          {showAIChat && (
-            <div style={{ width: 384, background: '#1F2937', display: 'flex', flexDirection: 'column', borderLeft: '4px solid #EAB308', position: 'fixed', right: 0, top: 0, bottom: 0, marginTop: 58 }}>
-              <div style={{ padding: '14px 16px', background: '#111827', borderBottom: '1px solid #374151' }}>
-                <div style={{ fontWeight: 'bold', color: '#EAB308', display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <MessageSquare size={18} /> AI Study Assistant
-                </div>
-                <div style={{ fontSize: 12, color: '#9CA3AF', marginTop: 4 }}>Ask me anything about this material!</div>
-              </div>
-              <div style={{ flex: 1, overflowY: 'auto', padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
-                {aiMessages.map((msg, i) => (
-                  <div key={i} style={{ display: 'flex', justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start' }}>
-                    <div style={{ maxWidth: '80%', padding: '10px 14px', borderRadius: 10, background: msg.role === 'user' ? '#EAB308' : '#374151', color: msg.role === 'user' ? '#000' : '#fff', fontSize: 14, whiteSpace: 'pre-wrap' }}>
-                      {msg.content}
-                    </div>
-                  </div>
-                ))}
-                {aiLoading && (
-                  <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
-                    <div style={{ background: '#374151', borderRadius: 10, padding: 12 }}>
-                      <Loader size={18} color="#fff" className="animate-spin" />
-                    </div>
-                  </div>
-                )}
-              </div>
-              <div style={{ padding: 16, background: '#111827', borderTop: '1px solid #374151', display: 'flex', gap: 8 }}>
-                <input
-                  value={aiInput}
-                  onChange={e => setAiInput(e.target.value)}
-                  onKeyPress={e => e.key === 'Enter' && !aiLoading && askAI()}
-                  placeholder="Ask a question..."
-                  style={{ flex: 1, padding: '10px 14px', background: '#1F2937', color: '#fff', border: '1px solid #374151', borderRadius: 8, outline: 'none', fontSize: 14 }}
-                />
-                <button onClick={askAI} disabled={aiLoading || !aiInput.trim()} style={{ padding: '10px 16px', background: '#EAB308', border: 'none', borderRadius: 8, cursor: aiLoading || !aiInput.trim() ? 'not-allowed' : 'pointer', opacity: aiLoading || !aiInput.trim() ? 0.5 : 1 }}>
-                  <Send size={18} color="#000" />
-                </button>
               </div>
             </div>
           )}
@@ -513,154 +552,284 @@ export default function Discussant() {
     );
   }
 
-  // ─── MAIN APP ───
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-800">
-      {/* TUTORIAL */}
-      {showTutorial && (
-        <div className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl p-8 max-w-md w-full border-4 border-yellow-500">
-            <div className="text-center mb-6">
-              {tutorialSteps[tutorialStep].icon}
-              <h2 className="text-2xl font-bold mt-4">{tutorialSteps[tutorialStep].title}</h2>
-            </div>
-            <p className="text-gray-700 text-center mb-6 leading-relaxed">{tutorialSteps[tutorialStep].content}</p>
-            <div className="flex gap-3">
-              {tutorialStep > 0 && (
-                <button onClick={() => setTutorialStep(p => p - 1)} className="flex-1 px-6 py-3 border-2 border-gray-300 text-gray-700 font-bold rounded-lg hover:bg-gray-100">Back</button>
-              )}
-              {tutorialStep < tutorialSteps.length - 1 ? (
-                <button onClick={() => setTutorialStep(p => p + 1)} className="flex-1 px-6 py-3 bg-yellow-500 text-black font-bold rounded-lg hover:bg-yellow-600">
-                  Next ({tutorialStep + 1}/{tutorialSteps.length})
-                </button>
-              ) : (
-                <button onClick={completeTutorial} className="flex-1 px-6 py-3 bg-yellow-500 text-black font-bold rounded-lg hover:bg-yellow-600">Let's Go! 🚀</button>
-              )}
-            </div>
-            <button onClick={completeTutorial} className="w-full mt-3 text-gray-400 hover:text-gray-700 text-sm">Skip</button>
+  // AUTH SCREEN
+  if (!user) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #0F172A 0%, #1E293B 100%)' }}>
+        <div style={{ background: '#fff', borderRadius: 24, padding: 40, maxWidth: 420, width: '100%', boxShadow: '0 25px 50px rgba(0,0,0,0.5)', border: '4px solid #EAB308' }}>
+          <div style={{ textAlign: 'center', marginBottom: 32 }}>
+            <Brain size={80} color="#EAB308" style={{ margin: '0 auto 16px' }} strokeWidth={2} />
+            <h1 style={{ fontSize: 36, fontWeight: 900, color: '#111', margin: 0 }}>Discussant</h1>
+            <p style={{ color: '#666', fontWeight: 500, marginTop: 8 }}>Medical Study Platform</p>
           </div>
-        </div>
-      )}
-
-      {/* SHARE MODAL */}
-      {showShareModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl p-8 max-w-lg w-full border-4 border-yellow-500">
-            <div className="text-center mb-6">
-              <Users className="w-14 h-14 text-yellow-500 mx-auto mb-3" />
-              <h2 className="text-3xl font-bold">Share Discussant</h2>
-            </div>
-            <div className="bg-gray-50 p-4 rounded-lg mb-4 border-2 border-gray-200 text-sm text-gray-700 font-mono whitespace-pre-line">
-{`Check out Discussant - a study platform for med school!
-
-• Templates for all years & rotations
-• Upload files (PDFs, slides, notes)
-• Auto study timer
-• AI tutor for instant help
-
-Visit: https://discussant.vercel.app`}
-            </div>
-            <div className="flex gap-3">
-              <button onClick={() => setShowShareModal(false)} className="flex-1 px-6 py-3 border-2 border-gray-300 font-bold rounded-lg hover:bg-gray-100">Close</button>
-              <button onClick={copyShare} className="flex-1 px-6 py-3 bg-yellow-500 text-black font-bold rounded-lg hover:bg-yellow-600">Copy</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* NAME PROMPT */}
-      {showNamePrompt && (
-        <div className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl p-8 max-w-md w-full border-4 border-yellow-500">
-            <div className="text-center mb-6">
-              <Brain className="w-16 h-16 text-yellow-500 mx-auto mb-3" />
-              <h2 className="text-3xl font-bold">Welcome to Discussant!</h2>
-              <p className="text-gray-600 mt-2">Your medical study platform</p>
-            </div>
+          
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {authMode === 'register' && (
+              <input
+                type="text"
+                placeholder="Full Name"
+                value={authName}
+                onChange={e => setAuthName(e.target.value)}
+                style={{ width: '100%', padding: '14px 20px', border: '2px solid #D1D5DB', borderRadius: 12, fontWeight: 500, fontSize: 15, boxSizing: 'border-box' }}
+              />
+            )}
             <input
-              type="text"
-              placeholder="Enter your name"
-              className="w-full px-4 py-3 border-2 border-yellow-500 rounded-lg mb-4 text-lg focus:outline-none focus:ring-2 focus:ring-yellow-400"
-              onKeyPress={e => { if (e.key === 'Enter' && e.target.value.trim()) saveUserName(e.target.value.trim()); }}
+              type="email"
+              placeholder="Email"
+              value={authEmail}
+              onChange={e => setAuthEmail(e.target.value)}
+              style={{ width: '100%', padding: '14px 20px', border: '2px solid #D1D5DB', borderRadius: 12, fontWeight: 500, fontSize: 15, boxSizing: 'border-box' }}
+            />
+            <input
+              type="password"
+              placeholder="Password"
+              value={authPassword}
+              onChange={e => setAuthPassword(e.target.value)}
+              onKeyPress={e => e.key === 'Enter' && handleAuth()}
+              style={{ width: '100%', padding: '14px 20px', border: '2px solid #D1D5DB', borderRadius: 12, fontWeight: 500, fontSize: 15, boxSizing: 'border-box' }}
             />
             <button
-              onClick={e => { const inp = e.target.previousSibling; if (inp.value.trim()) saveUserName(inp.value.trim()); }}
-              className="w-full px-6 py-3 bg-yellow-500 text-black font-bold rounded-lg hover:bg-yellow-600 text-lg"
+              onClick={handleAuth}
+              style={{ width: '100%', padding: '14px 24px', background: 'linear-gradient(135deg, #EAB308, #CA8A04)', color: '#000', fontWeight: 700, borderRadius: 12, border: 'none', cursor: 'pointer', fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
             >
-              Get Started
+              {authMode === 'login' ? <><LogIn size={20} /> Login</> : <><UserPlus size={20} /> Sign Up</>}
             </button>
+            <button
+              onClick={() => setAuthMode(authMode === 'login' ? 'register' : 'login')}
+              style={{ background: 'none', border: 'none', color: '#666', fontWeight: 600, cursor: 'pointer', fontSize: 14 }}
+            >
+              {authMode === 'login' ? "Don't have an account? Sign Up" : 'Already have an account? Login'}
+            </button>
+            <div style={{ textAlign: 'center', fontSize: 12, color: '#999', marginTop: 8 }}>
+              <p>Demo: Use any email/password</p>
+              <p>Use email with 'admin' for admin access</p>
+            </div>
           </div>
         </div>
-      )}
+      </div>
+    );
+  }
 
-      {/* TEMPLATES */}
-      {showTemplates && (
-        <div className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl p-8 max-w-2xl w-full border-4 border-yellow-500 max-h-[90vh] overflow-y-auto">
-            <div className="text-center mb-6">
-              <BookOpen className="w-16 h-16 text-yellow-500 mx-auto mb-3" />
-              <h2 className="text-3xl font-bold">Choose Your Template</h2>
-              <p className="text-gray-600 mt-2">Get started instantly with pre-loaded subjects</p>
-            </div>
-            <div className="space-y-3">
-              {Object.entries(templates).map(([key, t]) => (
-                <button key={key} onClick={() => loadTemplate(key)} className="w-full p-4 border-2 border-gray-300 rounded-lg hover:border-yellow-500 hover:bg-yellow-50 transition text-left">
-                  <div className="font-bold text-lg">{t.name}</div>
-                  {t.subjects.length > 0 && (
-                    <div className="text-sm text-gray-500 mt-1">
-                      {t.subjects.length} subjects • {t.subjects.reduce((s, sub) => s + sub.topics.length, 0)} topics
-                    </div>
-                  )}
-                </button>
-              ))}
-            </div>
-            <button onClick={() => setShowTemplates(false)} className="w-full mt-6 text-gray-500 hover:text-gray-800 font-semibold">Skip for now</button>
-          </div>
-        </div>
-      )}
-
-      {/* HEADER */}
-      <div className="max-w-6xl mx-auto p-4">
-        <div className="bg-gradient-to-r from-yellow-500 to-yellow-600 rounded-2xl p-6 mb-6">
-          <div className="flex items-center justify-between flex-wrap gap-4">
-            <div className="flex items-center gap-3">
-              <Brain className="w-12 h-12 text-black" />
-              <div>
-                <h1 className="text-4xl font-bold text-black">Discussant</h1>
-                <p className="text-gray-900 font-semibold">Hey {userName}! Keep crushing it 💪</p>
+  // ADMIN PANEL
+  if (user.isAdmin && showAdminPanel) {
+    return (
+      <div style={{ minHeight: '100vh', padding: 24, background: theme.bg }}>
+        <div style={{ maxWidth: 800, margin: '0 auto' }}>
+          <div style={{ borderRadius: 24, padding: 32, marginBottom: 24, background: 'linear-gradient(135deg, #EAB308 0%, #CA8A04 100%)', boxShadow: '0 8px 24px rgba(0,0,0,0.2)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                <Shield size={56} color="#000" strokeWidth={2.5} />
+                <div>
+                  <h1 style={{ fontSize: 36, fontWeight: 900, color: '#000', margin: 0 }}>Admin Panel</h1>
+                  <p style={{ color: '#1F2937', fontWeight: 700, margin: 0 }}>Upload Study Materials</p>
+                </div>
               </div>
-            </div>
-            <div className="flex items-center gap-3 flex-wrap">
-              <div className="bg-black bg-opacity-20 px-4 py-2 rounded-lg flex items-center gap-2 text-black">
-                <Clock className="w-5 h-5" />
-                <span className="text-2xl font-bold">{getTotalStudyTime()}</span>
-                <span className="text-sm font-semibold">min</span>
-              </div>
-              <button onClick={exportData} className="px-4 py-2 bg-black text-yellow-500 rounded-lg font-semibold flex items-center gap-2 hover:bg-gray-900">
-                <Download className="w-5 h-5" /><span className="hidden sm:inline">Export</span>
+              <button onClick={() => setShowAdminPanel(false)} style={{ padding: '12px 24px', background: '#000', color: '#EAB308', borderRadius: 12, fontWeight: 700, border: 'none', cursor: 'pointer' }}>
+                Back to App
               </button>
-              <label className="px-4 py-2 bg-white text-black rounded-lg font-semibold flex items-center gap-2 cursor-pointer hover:bg-gray-100">
-                <Upload className="w-5 h-5" /><span className="hidden sm:inline">Import</span>
-                <input type="file" accept=".json" onChange={importData} className="hidden" />
+            </div>
+          </div>
+
+          <div style={{ borderRadius: 20, padding: 32, background: theme.cardBg, border: `2px solid ${theme.border}`, boxShadow: '0 4px 16px rgba(0,0,0,0.08)' }}>
+            <h2 style={{ fontSize: 24, fontWeight: 700, marginBottom: 24, color: theme.text }}>Upload New Material</h2>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <input
+                type="text"
+                placeholder="Material Title"
+                value={adminMaterialTitle}
+                onChange={e => setAdminMaterialTitle(e.target.value)}
+                style={{ width: '100%', padding: '14px 20px', border: `2px solid ${theme.border}`, borderRadius: 12, fontWeight: 500, background: theme.bg, color: theme.text, boxSizing: 'border-box' }}
+              />
+              <input
+                type="text"
+                placeholder="Subject/Specialty"
+                value={adminMaterialSubject}
+                onChange={e => setAdminMaterialSubject(e.target.value)}
+                style={{ width: '100%', padding: '14px 20px', border: `2px solid ${theme.border}`, borderRadius: 12, fontWeight: 500, background: theme.bg, color: theme.text, boxSizing: 'border-box' }}
+              />
+              <textarea
+                placeholder="Description"
+                value={adminMaterialDesc}
+                onChange={e => setAdminMaterialDesc(e.target.value)}
+                rows={3}
+                style={{ width: '100%', padding: '14px 20px', border: `2px solid ${theme.border}`, borderRadius: 12, fontWeight: 500, background: theme.bg, color: theme.text, boxSizing: 'border-box', resize: 'vertical' }}
+              />
+              <label style={{ width: '100%', padding: '14px 24px', background: 'linear-gradient(135deg, #EAB308, #CA8A04)', color: '#000', fontWeight: 700, borderRadius: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxSizing: 'border-box' }}>
+                <Upload size={20} /> Choose File to Upload
+                <input type="file" accept=".pdf,.ppt,.pptx,.doc,.docx" onChange={handleAdminUpload} style={{ display: 'none' }} />
               </label>
-              <button onClick={() => setShowTemplates(true)} className="px-4 py-2 bg-black text-yellow-500 rounded-lg font-semibold flex items-center gap-2 hover:bg-gray-900">
-                <BookOpen className="w-5 h-5" /><span className="hidden sm:inline">Templates</span>
+            </div>
+
+            <div style={{ marginTop: 32 }}>
+              <h3 style={{ fontSize: 20, fontWeight: 700, marginBottom: 16, color: theme.text }}>Uploaded Materials ({sharedMaterials.length})</h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {sharedMaterials.map(m => (
+                  <div key={m.id} style={{ padding: 16, borderRadius: 12, border: `2px solid ${theme.border}`, background: theme.bg }}>
+                    <div style={{ fontWeight: 700, color: theme.text }}>{m.title}</div>
+                    <div style={{ fontSize: 13, marginTop: 4, color: theme.textMuted }}>{m.subject} • {m.fileName}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // MAIN APP
+  return (
+    <div style={{ minHeight: '100vh', background: darkMode ? 'linear-gradient(135deg, #0F172A 0%, #1E293B 100%)' : 'linear-gradient(135deg, #F8FAFC 0%, #E2E8F0 100%)', transition: 'background 0.3s' }}>
+      {/* Case Modal */}
+      {showCaseModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.9)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, padding: 16 }}>
+          <div style={{ background: '#fff', borderRadius: 24, padding: 40, maxWidth: 640, width: '100%', boxShadow: '0 25px 50px rgba(0,0,0,0.5)', border: '4px solid #EAB308', maxHeight: '90vh', overflowY: 'auto' }}>
+            <h2 style={{ fontSize: 28, fontWeight: 700, marginBottom: 24 }}>Share a Clinical Case</h2>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <input
+                type="text"
+                placeholder="Case Title"
+                value={newCaseTitle}
+                onChange={e => setNewCaseTitle(e.target.value)}
+                style={{ width: '100%', padding: '14px 20px', border: '2px solid #D1D5DB', borderRadius: 12, fontWeight: 500, boxSizing: 'border-box' }}
+              />
+              <input
+                type="text"
+                placeholder="Specialty (e.g., Pediatrics, Surgery)"
+                value={newCaseSpecialty}
+                onChange={e => setNewCaseSpecialty(e.target.value)}
+                style={{ width: '100%', padding: '14px 20px', border: '2px solid #D1D5DB', borderRadius: 12, fontWeight: 500, boxSizing: 'border-box' }}
+              />
+              <textarea
+                placeholder="Case Description/Discussion Points..."
+                value={newCaseContent}
+                onChange={e => setNewCaseContent(e.target.value)}
+                rows={8}
+                style={{ width: '100%', padding: '14px 20px', border: '2px solid #D1D5DB', borderRadius: 12, fontWeight: 500, boxSizing: 'border-box', resize: 'vertical' }}
+              />
+              <div style={{ display: 'flex', gap: 12 }}>
+                <button onClick={() => setShowCaseModal(false)} style={{ flex: 1, padding: '14px 24px', border: '2px solid #D1D5DB', fontWeight: 700, borderRadius: 12, background: '#fff', cursor: 'pointer' }}>
+                  Cancel
+                </button>
+                <button onClick={handleAddCase} style={{ flex: 1, padding: '14px 24px', background: 'linear-gradient(135deg, #EAB308, #CA8A04)', color: '#000', fontWeight: 700, borderRadius: 12, border: 'none', cursor: 'pointer' }}>
+                  Share Case
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Viewing Case Modal */}
+      {viewingCase && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.9)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, padding: 16 }}>
+          <div style={{ background: '#fff', borderRadius: 24, padding: 40, maxWidth: 720, width: '100%', boxShadow: '0 25px 50px rgba(0,0,0,0.5)', maxHeight: '90vh', overflowY: 'auto' }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 24 }}>
+              <div style={{ flex: 1 }}>
+                <h2 style={{ fontSize: 28, fontWeight: 700, marginBottom: 8 }}>{viewingCase.title}</h2>
+                <p style={{ color: '#666' }}>By {viewingCase.authorName} • {viewingCase.specialty}</p>
+                <p style={{ fontSize: 13, color: '#999' }}>{formatDate(viewingCase.createdAt)}</p>
+              </div>
+              <button onClick={() => setViewingCase(null)} style={{ padding: 8, background: '#f3f4f6', borderRadius: 8, border: 'none', cursor: 'pointer' }}>
+                <X size={24} />
               </button>
-              <button onClick={() => setShowShareModal(true)} className="px-4 py-2 bg-black text-yellow-500 rounded-lg font-semibold flex items-center gap-2 hover:bg-gray-900">
-                <Users className="w-5 h-5" /><span className="hidden sm:inline">Share</span>
+            </div>
+
+            <div style={{ marginBottom: 24, padding: 20, background: '#F9FAFB', borderRadius: 12 }}>
+              <p style={{ whiteSpace: 'pre-wrap', lineHeight: 1.7 }}>{viewingCase.content}</p>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 24, paddingBottom: 24, borderBottom: '1px solid #E5E7EB' }}>
+              <button
+                onClick={() => handleToggleLike(viewingCase.id)}
+                style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px', borderRadius: 8, fontWeight: 600, border: 'none', cursor: 'pointer', background: viewingCase.likes?.includes(user.id) ? '#EAB308' : '#F3F4F6', color: viewingCase.likes?.includes(user.id) ? '#000' : '#374151' }}
+              >
+                <ThumbsUp size={18} /> {viewingCase.likes?.length || 0}
+              </button>
+              <span style={{ color: '#666' }}>{viewingCase.comments?.length || 0} comments</span>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <h3 style={{ fontWeight: 700, fontSize: 18, margin: 0 }}>Discussion</h3>
+              {viewingCase.comments?.map(comment => (
+                <div key={comment.id} style={{ padding: 16, background: '#F9FAFB', borderRadius: 12 }}>
+                  <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 4 }}>{comment.userName}</div>
+                  <p style={{ color: '#374151', margin: 0 }}>{comment.content}</p>
+                  <p style={{ fontSize: 12, color: '#9CA3AF', marginTop: 8 }}>{formatDate(comment.createdAt)}</p>
+                </div>
+              ))}
+              
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input
+                  type="text"
+                  placeholder="Add a comment..."
+                  value={caseComment}
+                  onChange={e => setCaseComment(e.target.value)}
+                  style={{ flex: 1, padding: '12px 16px', border: '2px solid #D1D5DB', borderRadius: 12 }}
+                />
+                <button
+                  onClick={() => handleAddComment(viewingCase.id)}
+                  style={{ padding: '12px 20px', background: '#EAB308', color: '#000', fontWeight: 700, borderRadius: 12, border: 'none', cursor: 'pointer' }}
+                >
+                  <Send size={18} />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Header */}
+      <div style={{ maxWidth: 1280, margin: '0 auto', padding: 20 }}>
+        <div style={{ borderRadius: 24, padding: 32, marginBottom: 24, background: 'linear-gradient(135deg, #EAB308 0%, #CA8A04 100%)', boxShadow: '0 8px 32px rgba(0,0,0,0.2)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 20 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+              <Brain size={56} color="#000" strokeWidth={2.5} />
+              <div>
+                <h1 style={{ fontSize: 44, fontWeight: 900, color: '#000', margin: 0 }}>Discussant</h1>
+                <p style={{ color: '#1F2937', fontWeight: 700, fontSize: 18, margin: 0 }}>Hey {user.name}! 💪</p>
+              </div>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              {user.isAdmin && (
+                <button onClick={() => setShowAdminPanel(true)} style={{ padding: '12px 16px', background: '#000', color: '#EAB308', borderRadius: 12, fontWeight: 700, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Shield size={20} /> Admin
+                </button>
+              )}
+              <button onClick={toggleDarkMode} style={{ padding: 12, background: 'rgba(0,0,0,0.2)', borderRadius: 12, border: 'none', cursor: 'pointer' }}>
+                {darkMode ? <Sun size={20} color="#000" /> : <Moon size={20} color="#000" />}
+              </button>
+              <div style={{ background: 'rgba(0,0,0,0.2)', borderRadius: 12, padding: '12px 20px', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Clock size={24} color="#000" />
+                <span style={{ fontSize: 28, fontWeight: 900, color: '#000' }}>{getTotalStudyTime()}</span>
+                <span style={{ fontSize: 13, color: '#1F2937', fontWeight: 600 }}>min</span>
+              </div>
+              <button onClick={handleLogout} style={{ padding: '12px 20px', background: '#000', color: '#EAB308', borderRadius: 12, fontWeight: 700, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <LogOut size={20} /> Logout
               </button>
             </div>
           </div>
         </div>
 
-        {/* TABS */}
-        <div className="bg-white rounded-xl mb-6 overflow-hidden border-2 border-yellow-500">
-          <div className="flex overflow-x-auto">
-            {['today', 'review', 'library', 'subjects', 'stats'].map(tab => (
+        {/* Tabs */}
+        <div style={{ borderRadius: 20, marginBottom: 24, overflow: 'hidden', background: theme.cardBg, border: `2px solid ${theme.border}`, boxShadow: '0 4px 16px rgba(0,0,0,0.06)' }}>
+          <div style={{ display: 'flex', overflowX: 'auto' }}>
+            {['today', 'review', 'library', 'cases', 'stats'].map(tab => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
-                className={`flex-1 py-4 px-4 font-bold text-lg whitespace-nowrap transition ${activeTab === tab ? 'bg-yellow-500 text-black' : 'text-gray-600 hover:bg-gray-100'}`}
+                style={{
+                  flex: 1,
+                  padding: '20px 20px',
+                  fontWeight: 700,
+                  fontSize: 17,
+                  whiteSpace: 'nowrap',
+                  border: 'none',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  background: activeTab === tab ? 'linear-gradient(135deg, #EAB308, #CA8A04)' : 'transparent',
+                  color: activeTab === tab ? '#000' : theme.textMuted
+                }}
               >
                 {tab.charAt(0).toUpperCase() + tab.slice(1)}
               </button>
@@ -668,196 +837,333 @@ Visit: https://discussant.vercel.app`}
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* MAIN CONTENT */}
-          <div className="lg:col-span-2 space-y-4">
-            {activeTab === 'today' && (
-              <div className="bg-white rounded-xl p-6 border-2 border-yellow-500">
-                <h2 className="text-2xl font-bold mb-4 flex items-center gap-2">
-                  <Calendar className="w-6 h-6 text-yellow-600" /> Today's Topics
-                </h2>
-                {getTodayTopics().length === 0 ? (
-                  <p className="text-gray-500 text-center py-8">No topics logged today. Add one →</p>
-                ) : (
-                  <div className="space-y-3">
-                    {getTodayTopics().map(t => (
-                      <div key={t.id} className="border-2 border-yellow-300 rounded-lg p-4 bg-yellow-50">
-                        <div className="flex items-start justify-between">
-                          <div className="flex-1">
-                            <span className="px-2 py-1 bg-black text-yellow-500 text-xs font-bold rounded-full">{getSubjectName(t.subjectId)}</span>
-                            <h3 className="font-bold text-lg mt-2">{t.title}</h3>
-                            {t.notes && <p className="text-gray-600 text-sm mt-1">{t.notes}</p>}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 24 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,2fr) minmax(0,1fr)', gap: 24 }}>
+            {/* Main Content */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+
+              {/* TODAY TAB */}
+              {activeTab === 'today' && (
+                <div style={{ borderRadius: 20, padding: 28, background: theme.cardBg, border: `2px solid ${theme.border}`, boxShadow: '0 4px 16px rgba(0,0,0,0.06)' }}>
+                  <div
+                    onClick={() => setTodayExpanded(!todayExpanded)}
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: todayExpanded ? 16 : 0, cursor: 'pointer' }}
+                  >
+                    <h2 style={{ fontSize: 28, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 12, margin: 0, color: theme.text }}>
+                      <Calendar size={32} color="#CA8A04" /> Today's Topics ({getTodayTopics().length})
+                    </h2>
+                    {todayExpanded ? <ChevronUp size={28} color={theme.text} /> : <ChevronDown size={28} color={theme.text} />}
+                  </div>
+
+                  {todayExpanded && (
+                    <>
+                      <input
+                        type="text"
+                        placeholder="Search today's topics..."
+                        value={todaySearch}
+                        onChange={e => setTodaySearch(e.target.value)}
+                        style={{ width: '100%', padding: '12px 16px', border: `2px solid ${theme.border}`, borderRadius: 12, fontWeight: 500, background: theme.bg, color: theme.text, marginBottom: 16, boxSizing: 'border-box' }}
+                      />
+                      <div style={{ maxHeight: 384, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 16 }}>
+                        {filteredTodayTopics.length === 0 ? (
+                          <p style={{ textAlign: 'center', padding: '32px 0', color: theme.textMuted }}>No topics found</p>
+                        ) : filteredTodayTopics.map(t => (
+                          <div key={t.id} style={{ padding: 20, borderRadius: 16, border: '2px solid #EAB308', background: darkMode ? '#1E293B' : '#FEF9C3' }}>
+                            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+                              <div style={{ flex: 1 }}>
+                                <span style={{ padding: '4px 12px', background: '#000', color: '#EAB308', fontSize: 12, fontWeight: 700, borderRadius: 999 }}>{getSubjectName(t.subjectId)}</span>
+                                <h3 style={{ fontWeight: 700, fontSize: 20, marginTop: 12, color: theme.text }}>{t.title}</h3>
+                                {t.notes && <p style={{ fontSize: 14, marginTop: 8, color: theme.textMuted }}>{t.notes}</p>}
+                              </div>
+                              <button onClick={() => toggleMastered(t.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4 }}>
+                                {t.mastered
+                                  ? <CheckCircle size={32} color="#CA8A04" />
+                                  : <Circle size={32} color={theme.textMuted} />}
+                              </button>
+                            </div>
                           </div>
-                          <button onClick={() => toggleMastered(t.id)} className="ml-2">
-                            {t.mastered ? <CheckCircle className="w-7 h-7 text-yellow-600" /> : <Circle className="w-7 h-7 text-gray-400" />}
-                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+
+              {/* LIBRARY TAB */}
+              {activeTab === 'library' && (
+                <div style={{ borderRadius: 20, padding: 28, background: theme.cardBg, border: `2px solid ${theme.border}`, boxShadow: '0 4px 16px rgba(0,0,0,0.06)' }}>
+                  <h2 style={{ fontSize: 28, fontWeight: 700, marginBottom: 24, display: 'flex', alignItems: 'center', gap: 12, color: theme.text }}>
+                    <FileText size={32} color="#CA8A04" /> Library ({allFiles.length})
+                  </h2>
+
+                  <div style={{ marginBottom: 32, padding: 24, borderRadius: 16, border: `2px dashed ${theme.border}` }}>
+                    <h3 style={{ fontWeight: 700, fontSize: 18, marginBottom: 16, color: theme.text }}>Upload Your Files</h3>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                      <select
+                        value={selectedSubject}
+                        onChange={e => setSelectedSubject(e.target.value)}
+                        style={{ width: '100%', padding: '12px 16px', border: `2px solid ${theme.border}`, borderRadius: 12, fontWeight: 500, background: theme.bg, color: theme.text }}
+                      >
+                        <option value="">Select Subject</option>
+                        {subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                      </select>
+                      <label style={{
+                        width: '100%', padding: '14px 24px',
+                        background: selectedSubject ? 'linear-gradient(135deg, #EAB308, #CA8A04)' : '#E5E7EB',
+                        color: '#000', fontWeight: 700, borderRadius: 12,
+                        cursor: selectedSubject ? 'pointer' : 'not-allowed',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12,
+                        boxSizing: 'border-box'
+                      }}>
+                        <Upload size={20} /> Choose Files
+                        <input type="file" multiple accept=".pdf,.ppt,.pptx,.doc,.docx,.jpg,.jpeg,.png" onChange={handleFileUpload} style={{ display: 'none' }} disabled={!selectedSubject} />
+                      </label>
+                    </div>
+                  </div>
+
+                  {sharedMaterials.length > 0 && (
+                    <div style={{ marginBottom: 24 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+                        <Lock size={18} color="#CA8A04" />
+                        <h3 style={{ fontWeight: 700, fontSize: 18, margin: 0, color: theme.text }}>Shared Study Materials</h3>
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                        {sharedMaterials.map(m => (
+                          <div
+                            key={m.id}
+                            onClick={() => openFile({ id: m.id, name: m.fileName, title: m.title, subject: m.subject, description: m.description, type: m.fileType, data: m.fileData, uploadedAt: m.uploadedAt, isShared: true })}
+                            style={{ padding: 20, borderRadius: 16, border: '2px solid #EAB308', background: darkMode ? '#1E293B' : '#FEF9C3', cursor: 'pointer' }}
+                          >
+                            <div style={{ fontWeight: 700, fontSize: 17, color: theme.text }}>{m.title}</div>
+                            <div style={{ fontSize: 13, marginTop: 4, color: theme.textMuted }}>{m.subject}</div>
+                            {m.description && <p style={{ fontSize: 12, marginTop: 8, color: theme.textMuted }}>{m.description}</p>}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {files.length > 0 && (
+                    <div>
+                      <h3 style={{ fontWeight: 700, fontSize: 18, marginBottom: 16, color: theme.text }}>Your Files</h3>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                        {subjects.map(sub => {
+                          const subFiles = files.filter(f => f.subjectId === sub.id);
+                          if (!subFiles.length) return null;
+                          return (
+                            <div key={sub.id} style={{ padding: 16, borderRadius: 16, border: `2px solid ${theme.border}`, background: theme.bg }}>
+                              <h4 style={{ fontWeight: 700, marginBottom: 12, color: theme.text }}>{sub.name}</h4>
+                              {subFiles.map(file => (
+                                <div
+                                  key={file.id}
+                                  onClick={() => openFile(file)}
+                                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 16, marginBottom: 8, borderRadius: 12, cursor: 'pointer', background: theme.cardBg }}
+                                >
+                                  <div>
+                                    <p style={{ fontWeight: 700, margin: 0, color: theme.text }}>{file.name}</p>
+                                    <p style={{ fontSize: 12, margin: '4px 0 0', color: theme.textMuted }}>Uploaded {formatDate(file.uploadedAt)}</p>
+                                  </div>
+                                  <button
+                                    onClick={e => { e.stopPropagation(); deleteFile(file.id); }}
+                                    style={{ padding: 8, color: '#EF4444', background: 'transparent', border: 'none', cursor: 'pointer', borderRadius: 8 }}
+                                  >
+                                    <Trash2 size={18} />
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* CASES TAB */}
+              {activeTab === 'cases' && (
+                <div style={{ borderRadius: 20, padding: 28, background: theme.cardBg, border: `2px solid ${theme.border}`, boxShadow: '0 4px 16px rgba(0,0,0,0.06)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+                    <h2 style={{ fontSize: 28, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 12, margin: 0, color: theme.text }}>
+                      <MessageCircle size={32} color="#CA8A04" /> Clinical Cases
+                    </h2>
+                    <button
+                      onClick={() => setShowCaseModal(true)}
+                      style={{ padding: '12px 20px', background: 'linear-gradient(135deg, #EAB308, #CA8A04)', color: '#000', fontWeight: 700, borderRadius: 12, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}
+                    >
+                      <Plus size={20} /> Share Case
+                    </button>
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                    {cases.length === 0 && (
+                      <p style={{ textAlign: 'center', color: theme.textMuted, padding: '32px 0' }}>No cases yet. Be the first to share one!</p>
+                    )}
+                    {cases.map(c => (
+                      <div
+                        key={c.id}
+                        onClick={() => setViewingCase(c)}
+                        style={{ padding: 20, borderRadius: 16, border: `2px solid ${theme.border}`, background: theme.bg, cursor: 'pointer' }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 12 }}>
+                          <div style={{ flex: 1 }}>
+                            <h3 style={{ fontWeight: 700, fontSize: 20, margin: 0, color: theme.text }}>{c.title}</h3>
+                            <p style={{ fontSize: 13, marginTop: 4, color: theme.textMuted }}>By {c.authorName} • {c.specialty}</p>
+                          </div>
+                          <span style={{ padding: '4px 12px', background: '#EAB308', color: '#000', fontSize: 12, fontWeight: 700, borderRadius: 999, whiteSpace: 'nowrap' }}>{c.specialty}</span>
+                        </div>
+                        <p style={{ fontSize: 14, color: theme.textMuted, marginBottom: 12, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{c.content}</p>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 16, fontSize: 14, color: theme.textMuted }}>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><ThumbsUp size={14} /> {c.likes?.length || 0}</span>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><MessageCircle size={14} /> {c.comments?.length || 0}</span>
+                          <span>{formatDate(c.createdAt)}</span>
                         </div>
                       </div>
                     ))}
                   </div>
-                )}
-              </div>
-            )}
+                </div>
+              )}
 
-            {activeTab === 'review' && (
-              <div className="bg-white rounded-xl p-6 border-2 border-yellow-500">
-                <h2 className="text-2xl font-bold mb-4 flex items-center gap-2">
-                  <TrendingUp className="w-6 h-6 text-black" /> Needs Review ({getNeedsReview().length})
-                </h2>
-                {getNeedsReview().length === 0 ? (
-                  <div className="text-center py-8">
-                    <CheckCircle className="w-16 h-16 text-yellow-500 mx-auto mb-2" />
-                    <p className="font-semibold text-gray-700">All caught up! 🎉</p>
-                  </div>
-                ) : getNeedsReview().map(t => (
-                  <div key={t.id} className="border-2 border-gray-200 rounded-lg p-4 mb-3 bg-gray-50">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <span className="px-2 py-1 bg-black text-yellow-500 text-xs font-bold rounded-full">{getSubjectName(t.subjectId)}</span>
-                        <h3 className="font-bold text-lg mt-2">{t.title}</h3>
-                        <p className="text-xs text-gray-400 mt-1">{t.lastReviewed ? `Last reviewed: ${formatDate(t.lastReviewed)}` : 'Never reviewed'}</p>
-                      </div>
-                      <div className="flex gap-2 ml-2">
-                        <button onClick={() => markReviewed(t.id)} className="px-3 py-1 bg-yellow-500 text-black font-bold rounded text-sm hover:bg-yellow-600">Reviewed</button>
-                        <button onClick={() => deleteTopic(t.id)} className="p-1 text-red-500 hover:bg-red-50 rounded"><Trash2 className="w-5 h-5" /></button>
-                      </div>
+              {/* REVIEW TAB */}
+              {activeTab === 'review' && (
+                <div style={{ borderRadius: 20, padding: 28, background: theme.cardBg, border: `2px solid ${theme.border}`, boxShadow: '0 4px 16px rgba(0,0,0,0.06)' }}>
+                  <h2 style={{ fontSize: 28, fontWeight: 700, marginBottom: 20, color: theme.text }}>Needs Review ({getNeedsReview().length})</h2>
+                  {getNeedsReview().length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: '48px 0' }}>
+                      <CheckCircle size={80} color="#CA8A04" style={{ margin: '0 auto 16px' }} />
+                      <p style={{ fontWeight: 700, fontSize: 20, color: theme.text }}>All caught up! 🎉</p>
                     </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {activeTab === 'library' && (
-              <div className="bg-white rounded-xl p-6 border-2 border-yellow-500">
-                <h2 className="text-2xl font-bold mb-4 flex items-center gap-2">
-                  <FileText className="w-6 h-6 text-yellow-600" /> Library ({files.length} files)
-                </h2>
-                {files.length === 0 ? (
-                  <div className="text-center py-12">
-                    <FileText className="w-16 h-16 text-gray-300 mx-auto mb-3" />
-                    <p className="text-gray-500">No files yet. Upload from the sidebar!</p>
-                  </div>
-                ) : subjects.map(sub => {
-                  const subFiles = files.filter(f => f.subjectId === sub.id);
-                  if (!subFiles.length) return null;
-                  return (
-                    <div key={sub.id} className="border-2 border-gray-200 rounded-lg p-4 mb-4">
-                      <h3 className="font-bold text-lg mb-3">{sub.name}</h3>
-                      {subFiles.map(file => (
-                        <div key={file.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg mb-2 hover:bg-yellow-50 transition cursor-pointer" onClick={() => openFile(file)}>
-                          <div className="flex-1">
-                            <p className="font-semibold">{file.name}</p>
-                            <p className="text-xs text-gray-400">Uploaded {formatDate(file.uploadedAt)} • Read: {Math.floor(file.readTime / 60)}min</p>
-                          </div>
-                          <div className="flex gap-2">
-                            <button onClick={e => { e.stopPropagation(); openFile(file); }} className="px-3 py-1 bg-yellow-500 text-black font-bold rounded text-sm hover:bg-yellow-600">Open</button>
-                            <button onClick={e => { e.stopPropagation(); deleteFile(file.id); }} className="p-1 text-red-500 hover:bg-red-50 rounded"><Trash2 className="w-4 h-4" /></button>
-                          </div>
+                  ) : getNeedsReview().map(t => (
+                    <div key={t.id} style={{ padding: 20, borderRadius: 16, border: `2px solid ${theme.border}`, background: theme.bg, marginBottom: 16 }}>
+                      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+                        <div style={{ flex: 1 }}>
+                          <span style={{ padding: '4px 12px', background: '#000', color: '#EAB308', fontSize: 12, fontWeight: 700, borderRadius: 999 }}>{getSubjectName(t.subjectId)}</span>
+                          <h3 style={{ fontWeight: 700, fontSize: 20, marginTop: 12, color: theme.text }}>{t.title}</h3>
                         </div>
-                      ))}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-
-            {activeTab === 'subjects' && (
-              <div className="bg-white rounded-xl p-6 border-2 border-yellow-500">
-                <h2 className="text-2xl font-bold mb-4">Your Subjects</h2>
-                <div className="grid grid-cols-2 gap-3">
-                  {subjects.map(sub => (
-                    <div key={sub.id} className="border-2 border-yellow-300 rounded-lg p-4 bg-yellow-50">
-                      <div className="flex justify-between mb-2">
-                        <h3 className="font-bold">{sub.name}</h3>
-                        <button onClick={() => deleteSubject(sub.id)} className="text-red-500 hover:bg-red-50 p-1 rounded"><Trash2 className="w-4 h-4" /></button>
+                        <div style={{ display: 'flex', gap: 8 }}>
+                          <button onClick={() => markReviewed(t.id)} style={{ padding: '8px 16px', background: '#EAB308', color: '#000', fontWeight: 700, borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 14 }}>Reviewed</button>
+                          <button onClick={() => deleteTopic(t.id)} style={{ padding: 8, color: '#EF4444', background: 'transparent', border: 'none', cursor: 'pointer', borderRadius: 8 }}><Trash2 size={18} /></button>
+                        </div>
                       </div>
-                      <p className="text-sm text-gray-600">{topics.filter(t => t.subjectId === sub.id).length} topics</p>
-                      <p className="text-sm text-gray-600">{files.filter(f => f.subjectId === sub.id).length} files</p>
                     </div>
                   ))}
                 </div>
-              </div>
-            )}
+              )}
 
-            {activeTab === 'stats' && (
-              <div className="bg-white rounded-xl p-6 border-2 border-yellow-500">
-                <h2 className="text-2xl font-bold mb-6 flex items-center gap-2">
-                  <Award className="w-7 h-7 text-yellow-600" /> Your Stats
-                </h2>
-                <div className="grid grid-cols-2 gap-4">
-                  {[
-                    { label: 'Total Topics', value: stats.total, bg: 'from-yellow-100 to-yellow-200', border: 'border-yellow-400' },
-                    { label: 'Mastered', value: stats.mastered, bg: 'from-gray-100 to-gray-200', border: 'border-gray-400' },
-                    { label: 'Study Minutes', value: stats.studyTime, bg: 'from-yellow-400 to-yellow-500', border: 'border-yellow-600' },
-                    { label: 'Files', value: files.length, bg: 'from-black to-gray-900', border: 'border-yellow-500', gold: true }
-                  ].map(s => (
-                    <div key={s.label} className={`bg-gradient-to-br ${s.bg} rounded-xl p-6 text-center border-2 ${s.border}`}>
-                      <div className={`text-4xl font-bold ${s.gold ? 'text-yellow-500' : 'text-black'}`}>{s.value}</div>
-                      <div className={`font-bold mt-2 ${s.gold ? 'text-yellow-400' : 'text-gray-800'}`}>{s.label}</div>
-                    </div>
-                  ))}
-                </div>
-                {stats.total > 0 && (
-                  <div className="mt-4 p-4 bg-yellow-500 rounded-lg text-center">
-                    <span className="text-black font-bold text-xl">Mastery Rate: {Math.round((stats.mastered / stats.total) * 100)}%</span>
+              {/* STATS TAB */}
+              {activeTab === 'stats' && (
+                <div style={{ borderRadius: 20, padding: 28, background: theme.cardBg, border: `2px solid ${theme.border}`, boxShadow: '0 4px 16px rgba(0,0,0,0.06)' }}>
+                  <h2 style={{ fontSize: 28, fontWeight: 700, marginBottom: 24, color: theme.text }}>Your Stats</h2>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+                    {[
+                      { label: 'Topics', value: topics.length, bg: 'linear-gradient(135deg, #FEF9C3, #FEF08A)', textColor: '#000' },
+                      { label: 'Mastered', value: topics.filter(t => t.mastered).length, bg: 'linear-gradient(135deg, #F3F4F6, #E5E7EB)', textColor: '#000' },
+                      { label: 'Study Min', value: getTotalStudyTime(), bg: 'linear-gradient(135deg, #EAB308, #CA8A04)', textColor: '#000' },
+                      { label: 'Files', value: allFiles.length, bg: 'linear-gradient(135deg, #0F172A, #1E293B)', textColor: '#EAB308' }
+                    ].map(s => (
+                      <div key={s.label} style={{ background: s.bg, borderRadius: 20, padding: 28, textAlign: 'center', boxShadow: '0 4px 16px rgba(0,0,0,0.1)' }}>
+                        <div style={{ fontSize: 52, fontWeight: 900, color: s.textColor }}>{s.value}</div>
+                        <div style={{ fontWeight: 700, marginTop: 12, color: s.textColor, opacity: 0.8 }}>{s.label}</div>
+                      </div>
+                    ))}
                   </div>
-                )}
-                <div className="mt-4 flex gap-3">
-                  <button onClick={() => setShowShareModal(true)} className="flex-1 px-4 py-3 bg-yellow-500 text-black font-bold rounded-lg hover:bg-yellow-600">Share App</button>
-                  <a href="https://docs.google.com/forms/d/e/1FAIpQLSewsGrJgqq6eJhgjzsrXYaZjKVcUAvuv5ZCOfqxTBvbyQGFMA/viewform" target="_blank" rel="noopener noreferrer" className="flex-1 px-4 py-3 bg-black text-yellow-500 font-bold rounded-lg hover:bg-gray-900 text-center">Feedback</a>
+                </div>
+              )}
+            </div>
+
+            {/* Sidebar */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+              {/* Add Subject */}
+              <div style={{ borderRadius: 20, padding: 24, background: theme.cardBg, border: `2px solid ${theme.border}`, boxShadow: '0 4px 16px rgba(0,0,0,0.06)' }}>
+                <h3 style={{ fontWeight: 700, fontSize: 17, marginBottom: 16, color: theme.text }}>Add Subject</h3>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <input
+                    type="text"
+                    value={newSubject}
+                    onChange={e => setNewSubject(e.target.value)}
+                    placeholder="e.g., Anatomy"
+                    style={{ flex: 1, padding: '12px 16px', border: `2px solid ${theme.border}`, borderRadius: 12, fontWeight: 500, background: theme.bg, color: theme.text }}
+                  />
+                  <button
+                    onClick={addSubject}
+                    style={{ padding: '12px 20px', background: 'linear-gradient(135deg, #EAB308, #CA8A04)', color: '#000', fontWeight: 700, borderRadius: 12, border: 'none', cursor: 'pointer' }}
+                  >
+                    <Plus size={20} />
+                  </button>
                 </div>
               </div>
-            )}
+
+              {/* Log Topic */}
+              <div style={{ borderRadius: 20, padding: 24, background: theme.cardBg, border: `2px solid ${theme.border}`, boxShadow: '0 4px 16px rgba(0,0,0,0.06)' }}>
+                <h3 style={{ fontWeight: 700, fontSize: 17, marginBottom: 16, color: theme.text }}>Log Topic</h3>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  <select
+                    value={selectedSubject}
+                    onChange={e => setSelectedSubject(e.target.value)}
+                    style={{ width: '100%', padding: '12px 16px', border: `2px solid ${theme.border}`, borderRadius: 12, fontWeight: 500, background: theme.bg, color: theme.text }}
+                  >
+                    <option value="">Select Subject</option>
+                    {subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  </select>
+                  <input
+                    type="text"
+                    value={newTopic}
+                    onChange={e => setNewTopic(e.target.value)}
+                    placeholder="Topic title"
+                    style={{ width: '100%', padding: '12px 16px', border: `2px solid ${theme.border}`, borderRadius: 12, fontWeight: 500, background: theme.bg, color: theme.text, boxSizing: 'border-box' }}
+                  />
+                  <textarea
+                    value={topicNotes}
+                    onChange={e => setTopicNotes(e.target.value)}
+                    placeholder="Notes (optional)"
+                    rows={3}
+                    style={{ width: '100%', padding: '12px 16px', border: `2px solid ${theme.border}`, borderRadius: 12, fontWeight: 500, background: theme.bg, color: theme.text, boxSizing: 'border-box', resize: 'vertical' }}
+                  />
+                  <button
+                    onClick={addTopic}
+                    style={{ width: '100%', padding: '14px 20px', background: 'linear-gradient(135deg, #EAB308, #CA8A04)', color: '#000', fontWeight: 700, borderRadius: 12, border: 'none', cursor: 'pointer', fontSize: 15 }}
+                  >
+                    + Log Topic
+                  </button>
+                </div>
+              </div>
+
+              {/* Subjects List */}
+              {subjects.length > 0 && (
+                <div style={{ borderRadius: 20, padding: 24, background: theme.cardBg, border: `2px solid ${theme.border}`, boxShadow: '0 4px 16px rgba(0,0,0,0.06)' }}>
+                  <h3 style={{ fontWeight: 700, fontSize: 17, marginBottom: 16, color: theme.text }}>Subjects ({subjects.length})</h3>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {subjects.map(sub => {
+                      const subTopics = topics.filter(t => t.subjectId === sub.id);
+                      const mastered = subTopics.filter(t => t.mastered).length;
+                      return (
+                        <div key={sub.id} style={{ padding: '12px 16px', borderRadius: 12, border: `2px solid ${theme.border}`, background: theme.bg }}>
+                          <div style={{ fontWeight: 700, color: theme.text, fontSize: 14 }}>{sub.name}</div>
+                          <div style={{ fontSize: 12, color: theme.textMuted, marginTop: 4 }}>{subTopics.length} topics • {mastered} mastered</div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Load Template */}
+              <div style={{ borderRadius: 20, padding: 24, background: theme.cardBg, border: `2px solid ${theme.border}`, boxShadow: '0 4px 16px rgba(0,0,0,0.06)' }}>
+                <h3 style={{ fontWeight: 700, fontSize: 17, marginBottom: 16, color: theme.text }}>Load Template</h3>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {Object.entries(templates).map(([key, tmpl]) => (
+                    <button
+                      key={key}
+                      onClick={() => loadTemplate(key)}
+                      style={{ width: '100%', padding: '10px 16px', border: `2px solid ${theme.border}`, borderRadius: 10, background: theme.bg, color: theme.text, fontWeight: 600, cursor: 'pointer', textAlign: 'left', fontSize: 14 }}
+                    >
+                      {tmpl.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
           </div>
-
-          {/* SIDEBAR */}
-          <div className="space-y-4">
-            <div className="bg-white rounded-xl p-5 border-2 border-yellow-500">
-              <h3 className="font-bold text-lg mb-3">Add Subject</h3>
-              <div className="flex gap-2">
-                <input type="text" value={newSubject} onChange={e => setNewSubject(e.target.value)} placeholder="e.g., Anatomy" className="flex-1 px-3 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:outline-none" />
-                <button onClick={addSubject} className="px-4 py-2 bg-yellow-500 text-black font-bold rounded-lg hover:bg-yellow-600"><Plus className="w-5 h-5" /></button>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-xl p-5 border-2 border-yellow-500">
-              <h3 className="font-bold text-lg mb-3 flex items-center gap-2"><FileText className="w-5 h-5" /> Upload Files</h3>
-              <div className="space-y-3">
-                <select value={selectedSubject} onChange={e => setSelectedSubject(e.target.value)} className="w-full px-3 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:outline-none">
-                  <option value="">Select Subject First</option>
-                  {subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                </select>
-                <label className={`w-full px-4 py-3 ${selectedSubject ? 'bg-yellow-500 hover:bg-yellow-600 cursor-pointer' : 'bg-gray-300 cursor-not-allowed'} text-black font-bold rounded-lg flex items-center justify-center gap-2 transition`}>
-                  <Upload className="w-5 h-5" /> Choose Files
-                  <input type="file" multiple accept=".pdf,.ppt,.pptx,.doc,.docx,.jpg,.jpeg,.png" onChange={handleFileUpload} className="hidden" disabled={!selectedSubject} />
-                </label>
-                <p className="text-xs text-gray-400 text-center">PDF, PPT, Word, Images</p>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-xl p-5 border-2 border-yellow-500">
-              <h3 className="font-bold text-lg mb-3">Log Topic</h3>
-              <div className="space-y-3">
-                <select value={selectedSubject} onChange={e => setSelectedSubject(e.target.value)} className="w-full px-3 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:outline-none">
-                  <option value="">Select Subject</option>
-                  {subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                </select>
-                <input type="text" value={newTopic} onChange={e => setNewTopic(e.target.value)} placeholder="Topic title" className="w-full px-3 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:outline-none" />
-                <textarea value={topicNotes} onChange={e => setTopicNotes(e.target.value)} placeholder="Notes (optional)" rows={2} className="w-full px-3 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:outline-none" />
-                <button onClick={addTopic} className="w-full px-4 py-2 bg-yellow-500 text-black font-bold rounded-lg hover:bg-yellow-600 flex items-center justify-center gap-2">
-                  <Plus className="w-5 h-5" /> Add Topic
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="mt-8 pb-6 text-center flex items-center justify-center gap-4 text-gray-400 text-sm flex-wrap">
-          <button onClick={() => setShowTutorial(true)} className="hover:text-yellow-500">Tutorial</button>
-          <span>•</span>
-          <button onClick={() => setShowShareModal(true)} className="hover:text-yellow-500">Share</button>
-          <span>•</span>
-          <a href="https://docs.google.com/forms/d/e/1FAIpQLSewsGrJgqq6eJhgjzsrXYaZjKVcUAvuv5ZCOfqxTBvbyQGFMA/viewform" target="_blank" rel="noopener noreferrer" className="hover:text-yellow-500">Feedback</a>
         </div>
       </div>
     </div>
